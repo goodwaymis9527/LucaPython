@@ -129,9 +129,21 @@ python aws/bootstrap.py       # ECR + IAM roles + CloudWatch + ALB + target grou
 Neon 專案 `luca-python`（獨立 compute，資料庫同名 `awsLucaPysn`）：
 
 ```powershell
-python aws/rds.py             # 印出 Neon 連線資訊
+python aws/neon.py            # 印出 Neon 連線資訊（需要 NEON_API_KEY）
 python aws/secret.py          # 連線字串存進 Secrets Manager
 ```
+
+`NEON_API_KEY` 取得方式：Neon Console → 左上 **Settings** → **API Keys** → **Add API key**
+（選 Personal key 即可；組織 key 會限定 org）。拿到後寫進 gitignored 的 `.env`：
+
+```
+NEON_API_KEY=napi_xxx...
+```
+
+只有這支腳本會用到 key；app 執行期不需要（執行期只讀 Secrets Manager 的 `DATABASE_URL`）。
+若 `.aws-state/neon.json` 已有紀錄，沒有 key 時 `neon.py` 會直接把現存紀錄印出來，不會崩潰。
+
+`aws/rds.py` 是「自己管 RDS」的備選方案（與 Neon 二選一，不要同時用）。
 
 本機直連 Neon 會 timeout（5432 被擋），所以正式機資料庫只能從 VPC 內存取；
 本機開發繼續用 `postgres17`。
