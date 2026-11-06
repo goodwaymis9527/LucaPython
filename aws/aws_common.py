@@ -120,9 +120,13 @@ def build_task_definition(state: dict, image_uri: str) -> dict:
     return tpl
 
 
-def call(service: str, action: str, **params):
-    """client(service).action(**params) 的短寫法，讓 status/exec 這類腳本比较短。"""
-    return getattr(client(service), action)(**params)
+def call(svc: str, action: str, **params):
+    """client(service).action(**params) 的短寫法，讓 status/exec 這類腳本比较短。
+
+    第一個參數改名 svc：否則 `call("ecs", "list_tasks", service=...)` 會和它撞名
+    （TypeError: call() got multiple values for argument 'service'）。
+    """
+    return getattr(client(svc), action)(**params)
 
 
 def print_c(msg: str) -> None:

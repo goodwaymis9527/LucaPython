@@ -44,12 +44,12 @@ def main() -> int:
         print_c(f"  Target:    {svc['loadBalancers'][0]['targetGroupArn']}")
 
     def show_task_def():
-        # ListTaskDefinitions 只收 familyPrefix（沒有 family）
-        tds = call("ecs", "list_task_definitions", familyPrefix=name, maxResults=1).get("taskDefinitions") or []
+        # ListTaskDefinitions 只收 familyPrefix（沒有 family），回應的鍵是 taskDefinitionArns
+        tds = call("ecs", "list_task_definitions", familyPrefix=name, sort="DESC", maxResults=1).get("taskDefinitionArns") or []
         if not tds:
             print_c("  （還沒有 task definition revision）")
             return
-        td = call("ecs", "describe_task_definition", taskDefinitionArn=tds[0]["taskDefinitionArn"])["taskDefinition"]
+        td = call("ecs", "describe_task_definition", taskDefinitionArn=tds[0])["taskDefinition"]
         container = td["containerDefinitions"][0]
         print_c(f"  Task def:  {td['taskDefinitionArn']}")
         print_c(f"  CPU/Mem:   {td['cpu']}/{td['memory']} | {td['networkMode']}")

@@ -360,7 +360,8 @@ if not svc:
         launchType="FARGATE",
         platformVersion="LATEST",   # '1.0.0' 會被拒（Fargate 最低 1.1.0）
         desiredCount=1,
-        networkMode="awsvpc",
+        # networkMode 是 task definition 的欄位，CreateService 不收（會 ParamValidationError）
+        healthCheckGracePeriodSeconds=60,
         # TargetType 'ip'（awsvpc）時 loadBalancers 一定要帶 containerName/containerPort
         loadBalancers=[{
             "targetGroupArn": tg["TargetGroupArn"],
