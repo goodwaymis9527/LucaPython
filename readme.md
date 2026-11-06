@@ -45,8 +45,13 @@ docker exec luca-python python scripts/smoke_test.py
 ```
 
 ```powershell
-# AWS 一鍵部署（三步）
+# AWS 一鍵部署（三步，第一次）
 python aws/bootstrap.py; python aws/secret.py; python aws/deploy.py
+```
+
+```bat
+# 以後每次發佈（build + push + register + update service + 輪詢 rollout）
+deploy.bat
 ```
 
 ```powershell
@@ -188,7 +193,78 @@ python aws/exec.py "python scripts/migrate.py"
 
 ---
 
-## 4. `.aws-state/`（狀態檔）
+## 4. 以後怎麼發佈（deploy.bat）
+
+`deploy.bat` 只做分派（全 ASCII、1024 bytes 以內），真正的動作在 `aws/ops.py`：
+
+| 指令 | 動作 |
+|---|---|
+| `deploy.bat` | `aws/deploy.py`：docker build → push ECR → register revision → update service（輪詢到 `COMPLETED`） |
+| `deploy.bat health` | 打 ALB 的 `/api/health` |
+| `deploy.bat smoke` | `scripts/smoke_test.py` 打 ALB |
+| `deploy.bat logs [n]` | 最近 n 條 CloudWatch events（預設 20） |
+| `deploy.bat migrate` | 在 VPC 內的一-shot 任務跑 `scripts/migrate.py`（一定附 `--stop`） |
+| `deploy.bat status` | 資源狀態 |
+| `deploy.bat data` | 本機資料 → 冪等 upsert SQL（`scripts/dump_data.py`） |
+| `deploy.bat usage` | 說明 |
+
+標準流程：
+
+1. 改程式 → `gitGithubPush.bat`（會先 push `LucaPython`，再 push 父倉的 gitlink）
+2. `deploy.bat`（image 是从目前工作樹 build 的，所以要先把要上的內容 commit/確認）
+3. `deploy.bat health` 或 `deploy.bat smoke` 驗收
+
+> `.bat` 保持全 ASCII 且 ≤1024 bytes：cmd 讀 .bat 是一塊 1024 bytes，行被切開會報 `not recognized`；
+> 中文訊息由 `aws/ops.py`（Python 印 UTF-8）負責。
+
+---
+
+## 5. PostgreSQL 手動同步
+
+`schema.sql` 是唯一的 schema 來源，`scripts/migrate.py` 是冪等（`IF NOT EXISTS`），重複跑不會壞資料。
+
+**重要限制**：本機 outbound 5432 連不到 Neon（實測 timeout），連容器內跑的 app 也連不到；
+所以「本機直接寫 Neon」這條路走不通，只能走 443（Neon Console 的 SQL Editor）或 VPC 內的一-shot 任務。
+
+### A. Schema 同步
+
+```powershell
+# 本機（postgres17）
+python scripts/migrate.py
+
+# 正式區（Neon，VPC 內 one-shot task）
+deploy.bat migrate
+```
+
+### B. 資料同步（本機 → 正式區）
+
+```powershell
+# 1) 從本機 DB 產生冪等 SQL（upsert；--mode=insert 只補缺漏不覆蓋）
+python scripts/dump_data.py --out=neon_sync_items.sql
+
+# 2a) 手工：Neon Console → SQL Editor → 貼上 → Run（一次一句，或整段貼）
+# 2b) 脚本：透過 VPC 內 one-shot task 執行（SQL 不在 image 內，所以用 base64 帶進去）
+python scripts/apply_sql.py --file=neon_sync_items.sql          # 本機端（打本機 DB，可先演练）
+python aws/run_once.py "python scripts/apply_sql.py --b64=<base64>" --stop   # 正式區（打 Neon）
+```
+
+`apply_sql.py` 在一個交易內跑完、成功才 commit，失敗 rollback，不會留半套資料。
+
+### C. 反向（正式區 → 本機）
+
+- Neon Console → SQL Editor → `SELECT ...` → 結果可下載 CSV，再用 `docker exec postgres17 psql -U admin -d awsLucaPysn` 匯入；
+- 或在 VPC 內跑 `python scripts/apply_sql.py --b64=...`（把要插的 SQL 帶進去）。
+
+### D. 安全守則
+
+- 只用 `INSERT ... ON CONFLICT (id) DO UPDATE`（upsert），不要 `TRUNCATE`/`DELETE`；
+- 正式區 one-shot 任務一定附 `--stop`（Fargate 以 15 分鐘為計費單位）；
+- 本機開發 DB 與 Neon 正式 DB 同名 `awsLucaPysn`，打錯邊最常見 — 看 `/api/health` 的 `env`（`development` = 本機、`production` = Neon）；
+- 密碼只在 gitignored 的 `.env` / `.env.local` 與 Secrets Manager，不會進 repo。
+
+---
+
+## 6. `.aws-state/`（狀態檔）
 
 - `config.json`：AWS 資源 ID（`bootstrap.py` 寫入）＋ `db_secret_name` / `db_secret_arn`
 - `neon.json`：Neon 專案、分支、連線字串
@@ -197,7 +273,7 @@ python aws/exec.py "python scripts/migrate.py"
 
 ---
 
-## 5. 目錄結構
+## 7. 目錄結構
 
 ```
 LucaPython/
@@ -211,11 +287,14 @@ LucaPython/
 │  ├─ templates/index.html
 │  └─ static/style.css
 ├─ scripts/
-│  ├─ migrate.py        # 逐句執行 schema.sql
+│  ├─ migrate.py        # 逐句執行 schema.sql（冪等）
+│  ├─ dump_data.py      # 本機資料 → 冪等 upsert SQL（給 Neon SQL Editor）
+│  ├─ apply_sql.py      # 執行 SQL 檔/單句（交易內，失敗 rollback）
 │  ├─ healthcheck.py    # 容器 HEALTHCHECK（slim image 沒有 curl）
 │  └─ smoke_test.py     # 冒煙測試：health / 寫入 / 讀取 / 頁面 / 303
 ├─ aws/                 # 部署工具（boto3）
 │  ├─ aws_common.py     # 狀態檔、AWS API、task definition 組合
+│  ├─ ops.py            # 選單實作（deploy.bat 分派到這裡）
 │  ├─ bootstrap.py      # ECR + IAM roles + CloudWatch + SG + ALB + cluster + service
 │  ├─ deploy.py         # 一鍵部署（build / push / revision / update）
 │  ├─ secret.py         # DATABASE_URL → Secrets Manager
@@ -230,13 +309,14 @@ LucaPython/
 ├─ docker-compose.yml
 ├─ requirements.txt / requirements-dev.txt
 ├─ .env.example（.env.local 是本機版，不 commit）
+├─ deploy.bat           # 一鍵發佈的選單（ASCII、≤1024 bytes，分派給 aws/ops.py）
 ├─ deploy.ps1
 └─ readme.md
 ```
 
 ---
 
-## 6. 里程碑現況
+## 8. 里程碑現況
 
 | 里程碑 | 狀態 |
 |---|---|
@@ -246,5 +326,6 @@ LucaPython/
 | M3 健康檢查 | ✅ 完成（冒煙測試通過） |
 | M4 CRUD + Jinja2 | ✅ 完成（冒煙測試通過） |
 | M5 Docker | ✅ 完成（HEALTHCHECK healthy） |
-| M6 AWS 腳本（含 IAM policy） | ✅ 寫完、語法檢查通過（policy 尚未掛到 `lucaaws`） |
-| M7 正式上線 | ◐ Neon 專案已建；`bootstrap.py` 跑到第 3 步（ECR）被 IAM 權限擋下 |
+| M6 AWS 腳本（含 IAM policy） | ✅ 完成（policy 已掛到 `lucaaws`；加 PassRole/GetUser/ListUserPolicies/RunTask/StopTask） |
+| M7 正式上線 | ✅ 完成（ECR → ECS Fargate → ALB；`/api/health` 200，DB = Neon） |
+| M8 收尾 | ✅ 完成（`deploy.bat` 選單、手動同步流程、readme/文件） |

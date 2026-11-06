@@ -115,6 +115,24 @@ print("=== 4) update service ===")
 td_ref = f"{state['taskFamily']}:{state['taskRevision']}"
 ecs.update_service(cluster=state["cluster"], service=state["service"], taskDefinition=td_ref, forceNewDeployment=True)
 state["lastDeploymentAt"] = datetime.now(timezone.utc).isoformat()
+
+# rolling 部署是非同步的：新任務 healthy 後才停舊任務，所以要輪詢到 COMPLETED 才算真的上線
+# （Fargate 起任務約 30–60 秒，這裡最多等 5 分鐘；--no-wait 可跳過）
+if "--no-wait" not in argv:
+    import time
+
+    print("=== 5) wait for the rolling deployment ===")
+    for attempt in range(30):
+        svc = ecs.describe_services(cluster=state["cluster"], services=[state["service"]])["services"][0]
+        deps = [(d["rolloutState"], d["taskDefinition"].rsplit("/", 1)[-1],
+                 d["runningCount"], d["desiredCount"]) for d in svc["deployments"]]
+        print(f"  {attempt + 1:2d} {deps}")
+        if len(deps) == 1 and deps[0][0] == "COMPLETED" and deps[0][2] == deps[0][3]:
+            break
+        time.sleep(10)
+    else:
+        print("  还没 COMPLETED（可能新任務不 healthy 或舊任務還在）；看 aws/status.py --logs")
+
 save_state(state)
 
 print("")

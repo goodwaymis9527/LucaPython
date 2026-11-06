@@ -15,9 +15,14 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import boto3
+
+# Windows -console（或輸出 redirected 到檔）預設 cp950，✔ 這類字元會 UnicodeEncodeError；統一 utf-8
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
 PROJECT = os.environ.get("LUCA_PYTHON_PROJECT", "luca-python")
