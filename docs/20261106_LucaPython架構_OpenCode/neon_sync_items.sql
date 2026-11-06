@@ -1,0 +1,21 @@
+-- items 資料同步（來源 DB：awsLucaPysn @ localhost）
+-- 產生時間：2026-11-06T08:00:49.833005+00:00｜16 列｜mode=upsert
+-- 適用：Neon（正式區 awsLucaPysn）SQL Editor 或 VPC 內 one-shot task
+BEGIN;
+INSERT INTO items (id, title, body, created_at) VALUES (1, 'smoke test', 'created by scripts/smoke_test.py', '2026-11-06 05:31:11.436883+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (2, 'smoke test', 'created by scripts/smoke_test.py', '2026-11-06 05:31:59.141510+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (3, 'smoke test', 'created by scripts/smoke_test.py', '2026-11-06 05:32:04.961997+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (4, 'curl test', '', '2026-11-06 05:32:05.328272+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (5, 'smoke test', 'created by scripts/smoke_test.py', '2026-11-06 05:35:52.976806+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (6, 'smoke test', 'created by scripts/smoke_test.py', '2026-11-06 05:36:05.128148+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (7, 'smoke test', 'created by scripts/smoke_test.py', '2026-11-06 05:36:16.534113+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (8, 'smoke test', 'created by scripts/smoke_test.py', '2026-11-06 05:37:03.260562+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (9, 'smoke test', 'created by scripts/smoke_test.py', '2026-11-06 05:37:18.817749+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (10, 'form post', 'from form', '2026-11-06 05:37:18.859052+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (11, 'smoke test', 'created by scripts/smoke_test.py', '2026-11-06 05:42:38.083361+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (12, 'form post', 'from form', '2026-11-06 05:42:38.331515+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (13, 'smoke test', 'created by scripts/smoke_test.py', '2026-11-06 05:43:22.631834+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (14, 'form post', 'from form', '2026-11-06 05:43:22.671375+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (15, 'smoke test', 'created by scripts/smoke_test.py', '2026-11-06 05:44:30.450438+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+INSERT INTO items (id, title, body, created_at) VALUES (16, 'form post', 'from form', '2026-11-06 05:44:30.510619+00:00'::timestamptz) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, created_at = EXCLUDED.created_at;
+COMMIT;

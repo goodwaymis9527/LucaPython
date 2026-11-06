@@ -1,0 +1,84 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LucaPythonDeploy",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:DescribeRepositories",
+        "ecr:CreateRepository",
+        "ecr:GetAuthorizationToken",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage",
+        "ecr:BatchGetImage",
+
+        "ecs:ListClusters",
+        "ecs:DescribeClusters",
+        "ecs:CreateCluster",
+        "ecs:ListServices",
+        "ecs:DescribeServices",
+        "ecs:CreateService",
+        "ecs:UpdateService",
+        "ecs:ListTaskDefinitions",
+        "ecs:DescribeTaskDefinition",
+        "ecs:RegisterTaskDefinition",
+        "ecs:ListTasks",
+        "ecs:DescribeTasks",
+        "ecs:ExecuteCommand",
+        "ecs:RunTask",
+        "ecs:StopTask",
+
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:CreateLoadBalancer",
+        "elasticloadbalancing:DescribeTargetGroups",
+        "elasticloadbalancing:CreateTargetGroup",
+        "elasticloadbalancing:DescribeListeners",
+        "elasticloadbalancing:CreateListener",
+        "elasticloadbalancing:ModifyTargetGroupAttributes",
+
+        "ec2:DescribeVpcs",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeNetworkAcls",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DescribeRouteTables",
+        "ec2:DescribeInternetGateways",
+        "ec2:CreateSecurityGroup",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:CreateRoute",
+        "ec2:AttachInternetGateway",
+
+        "logs:DescribeLogGroups",
+        "logs:CreateLogGroup",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+
+        "iam:GetRole",
+        "iam:GetUser",
+        "iam:CreateRole",
+        "iam:PutRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListAttachedUserPolicies",
+        "iam:ListUserPolicies",
+        "iam:CreateServiceLinkedRole",
+        "iam:PassRole",
+
+        "secretsmanager:CreateSecret",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+
+        "ssm:GetParameter",
+        "ssm:SendCommand",
+
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
