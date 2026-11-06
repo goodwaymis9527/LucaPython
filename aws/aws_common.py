@@ -39,13 +39,23 @@ def client(service: str):
 
 
 def is_err_type(err, code: str) -> bool:
-    """boto3 的異常碼在 err.response['Error']['Code']，且 EC2 寫法是 InvalidGroup.Duplicate（有句點）。"""
-    want = code.replace(".", "")
+    """boto3 的異常碼在 err.response['Error']['Code']。
+
+    兩邊都要正規化：
+      - EC2 寫法是 InvalidGroup.Duplicate（有句點）
+      - IAM 的碼是 NoSuchEntity / EntityAlreadyExists，但例外「類別名」是 ...Exception
+    """
+    def norm(value: str) -> str:
+        value = value.replace(".", "")
+        if value.endswith("Exception"):
+            value = value[:-9]
+        return value
+
     try:
         got = (err.response.get("Error", {}) or {}).get("Code", "") or ""
     except AttributeError:
         got = getattr(err, "code", "") or ""
-    return got.replace(".", "") == want
+    return norm(got) == norm(code)
 
 
 def arn(kind: str, resource: str, account: str | None = None) -> str:

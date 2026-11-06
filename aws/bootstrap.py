@@ -20,9 +20,11 @@ import time
 from aws_common import (
     PROJECT,
     REGION,
+    STATE_FILE,
     arn,
     build_task_definition,
     client,
+    ensure_state_dir,
     is_err_type,
     new_state,
     save_state,
@@ -40,6 +42,12 @@ ecs = client("ecs")
 state = new_state()
 state["account"] = whoami()
 
+
+def flush() -> None:
+    """每節都寫一次 state：中途被權限錯誤（例如 iam:PassRole）打斷時，已建好的 ARN 不會丟失。"""
+    ensure_state_dir()
+    STATE_FILE.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
 print("=== 1) VPC / subnets ===")
 vpcs = ec2.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])["Vpcs"]
 if not vpcs:
@@ -54,6 +62,7 @@ if not subnets:
 
 state.update({"region": REGION, "project": PROJECT, "vpcId": vpc["VpcId"], "vpcCidr": vpc["CidrBlock"], "subnets": subnets})
 print(f"VPC {vpc['VpcId']}  {vpc['CidrBlock']}  subnet 數={len(subnets)}")
+flush()
 
 # 沒有 IGW 就沒有 internet 路由：外部連不進 ALB，task 也連不出去 Neon（Neon 在 AWS 之外，一定要走 IGW）
 print("=== 2) internet gateway + 0.0.0.0/0 路由 ===")
@@ -90,6 +99,7 @@ else:
             raise
 state["igwId"] = igw_id
 state["routeTableId"] = table["RouteTableId"]
+flush()
 
 public_subnets = [s["SubnetId"] for s in ec2.describe_subnets(
     Filters=[{"Name": "vpc-id", "Values": [vpc["VpcId"]]}])["Subnets"] if s.get("MapPublicIpOnLaunch")]
@@ -109,6 +119,7 @@ except Exception as err:
     )["repository"]
     print(f"建立 ECR: {repo['repositoryUri']}")
 state["ecrUri"] = repo["repositoryUri"]
+flush()
 
 print("=== 4) CloudWatch log group ===")
 log_group = f"/ecs/{PROJECT}"
@@ -120,6 +131,7 @@ except Exception as err:
     if not is_err_type(err, "ResourceAlreadyExistsException"):
         raise
     print("（已存在，略過）")
+flush()
 
 print("=== 5) IAM roles ===")
 trust = json.dumps({
@@ -147,6 +159,7 @@ exec_role = f"{PROJECT}-execution"
 task_role = f"{PROJECT}-task"
 state["executionRoleArn"] = ensure_role(exec_role)
 state["taskRoleArn"] = ensure_role(task_role)
+flush()
 
 # 執行角色：拉 ECR 镜像 + 寫 CloudWatch Logs
 try:
@@ -215,11 +228,23 @@ def ensure_sg(name: str, description: str) -> str:
 
 
 def authorize(group_id: str, port: int, source: dict) -> None:
+    """一律走 IpPermissions。
+
+    簡易寫法（IpProtocol/FromPort + SourceSecurityGroupId）會被 AWS 拒絕：
+    "The parameter 'SourceSecurityGroupId' may not be used in combination with 'FromPort'"
+    所以來源是 CIDR 時用 CidrIp，來源是 SG（含 self-reference）時用 UserIdGroupPairs。
+    """
+    permission = {"IpProtocol": "tcp", "FromPort": port, "ToPort": port}
+    if source.get("SourceSecurityGroupId"):
+        permission["UserIdGroupPairs"] = [{"GroupId": source["SourceSecurityGroupId"]}]
+        label = source["SourceSecurityGroupId"]
+    else:
+        # IpPermissions 裡 CIDR 要放 IpRanges（簡易寫法的 CidrIp 在這裡不是合法鍵）
+        label = source["CidrIp"]
+        permission["IpRanges"] = [{"CidrIp": label}]
     try:
-        ec2.authorize_security_group_ingress(
-            GroupId=group_id, IpProtocol="tcp", FromPort=port, ToPort=port, **source
-        )
-        print(f"  ingress {port} ← {source.get('SourceGroup') or source.get('CidrIp')}（寫入 {group_id}）")
+        ec2.authorize_security_group_ingress(GroupId=group_id, IpPermissions=[permission])
+        print(f"  ingress {port} ← {label}（寫入 {group_id}）")
     except Exception as err:
         if not is_err_type(err, "InvalidPermissionDuplicate"):
             raise
@@ -227,15 +252,17 @@ def authorize(group_id: str, port: int, source: dict) -> None:
 
 
 task_sg = ensure_sg(f"{PROJECT}-task", "ECS Fargate task ENI")
-authorize(task_sg, PORT, {"SourceGroup": task_sg})
+authorize(task_sg, PORT, {"SourceSecurityGroupId": task_sg})
 authorize(task_sg, PORT, {"CidrIp": vpc["CidrBlock"]})   # ALB 的 health check 來源就是 VPC 內
 state["taskSgId"] = task_sg
+flush()
 
 # ALB 如果沒有指定 SG，AWS 會套用 VPC 的 default SG（只有 self-reference）：
 # 外部 client 打 80 會被丟包，但 ALB 打到 task 的 health check 仍然 healthy → 「控制面全綠、資料面不通」
 alb_sg = ensure_sg(f"{PROJECT}-alb", "ALB public ingress")
 authorize(alb_sg, 80, {"CidrIp": "0.0.0.0/0"})
 state["albSgId"] = alb_sg
+flush()
 
 print("=== 7) ALB + target group + listener ===")
 alb = next((l for l in elb.describe_load_balancers().get("LoadBalancers", []) if l["LoadBalancerName"] == PROJECT), None)
@@ -279,10 +306,16 @@ if not tg:
         TargetType="ip",
         HealthCheckPath="/api/health",
         HealthCheckProtocol="HTTP",
-        DeregistrationDelayTimeout={"Seconds": 60},
     )
     tg = created_tg["TargetGroups"][0]
     print(f"建立 target group: {tg['TargetGroupArn']}")
+
+# deregistration delay 不能放在 CreateTargetGroup（它只能透過 ModifyTargetGroupAttributes 設定）
+elb.modify_target_group_attributes(
+    TargetGroupArn=tg["TargetGroupArn"],
+    Attributes=[{"Key": "deregistration_delay.timeout_seconds", "Value": "60"}],
+)
+print("  deregistration delay = 60s（draining 讓在跑的請求跑完再斷）")
 
 listeners = elb.describe_listeners(LoadBalancerArn=alb["LoadBalancerArn"]).get("Listeners", [])
 if not listeners:
@@ -297,13 +330,15 @@ if not listeners:
 state["albArn"] = alb["LoadBalancerArn"]
 state["albDns"] = alb["DNSName"]
 state["targetGroupArn"] = tg["TargetGroupArn"]
+flush()
 print(f"正式網址: http://{state['albDns']}")
 
 print("=== 8) task definition（第一版）===")
-td = ecs.register_task_definition(build_task_definition(state, state["ecrUri"]))["taskDefinition"]
+td = ecs.register_task_definition(**build_task_definition(state, state["ecrUri"]))["taskDefinition"]
 state["taskFamily"] = td["family"]
 state["taskRevision"] = td["revision"]
 print(f"task definition: {td['taskDefinitionArn']}")
+flush()
 
 print("=== 9) ECS cluster + service ===")
 cluster = (ecs.describe_clusters(clusters=[PROJECT]).get("clusters") or [None])[0]

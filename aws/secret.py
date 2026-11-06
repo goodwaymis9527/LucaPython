@@ -53,7 +53,7 @@ sm = client("secretsmanager")
 secret_name = f"{PROJECT}/database"
 
 try:
-    sm.create_secret(Name=secret_name, SecretString=url, description="luca-python DATABASE_URL (Neon)")
+    sm.create_secret(Name=secret_name, SecretString=url, Description="luca-python DATABASE_URL (Neon)")
     print(f"建立 secret: {secret_name}")
 except Exception as err:
     # 已存在時 boto3 丟 SecretExistsException（Code = "SecretExistsException"）
