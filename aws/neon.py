@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -63,13 +64,28 @@ if not api_key:
     raise SystemExit(0)
 
 
-def api(path: str) -> dict:
+ORG_ID = env_or_dotenv("NEON_ORG_ID")   # .env 可加 NEON_ORG_ID=org-...；沒有則 api() 會自己用 /users/me/organizations 查
+
+
+def api(path: str, params: str = "") -> dict:
+    """一次 GET。org key（或個人 key 但帳號属于某 org）時 `GET /projects` 需要 org_id。"""
+    if ORG_ID and "org_id" not in params:
+        params += (("&" if params else "?") + f"org_id={ORG_ID}")
     req = urllib.request.Request(
-        f"https://console.neon.tech/api/v2{path}",
+        f"https://console.neon.tech/api/v2{path}{params}",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as err:
+        body = err.read().decode("utf-8")
+        if err.code == 400 and "org_id is required" in body and not ORG_ID:
+            orgs = api("/users/me/organizations").get("organizations", [])
+            if orgs:
+                print(f"（自動用 org {orgs[0]['id']} 重試）")
+                return api(path, params + (("&" if params else "?") + f"org_id={orgs[0]['id']}"))
+        raise SystemExit(f"Neon API {err.code}: {body[:200]}")
 
 
 projects = api("/projects").get("projects", [])
@@ -85,15 +101,24 @@ print(f"Neon 專案 {match['name']}（{match['id']}）region={match['region_id']
 
 branches = api(f"/projects/{match['id']}/branches").get("branches", [])
 for branch in branches:
-    dbs = api(f"/projects/{match['id']}/branches/{branch['id']}/database").get("databases", [])
+    # 路徑是 databases（複數）；寫成 database 會 404 this route does not exist
+    dbs = api(f"/projects/{match['id']}/branches/{branch['id']}/databases").get("databases", [])
     names = [d["name"] for d in dbs]
     print(f"  branch {branch['name']}（{branch['id']}）databases={names}")
     if db_name not in names:
         print(f"    ⚠ 這個 branch 沒有 {db_name}；用 Neon Console 或 API 建：owner = neondb_owner")
         continue
-    conn = api(f"/projects/{match['id']}/branches/{branch['id']}/connection_string?dbname={db_name}")
-    url = conn.get("connection_string", "")
-    print(f"    connection string: {url}")
+    roles = api(f"/projects/{match['id']}/branches/{branch['id']}/roles").get("roles", [])
+    role = roles[0]["name"] if roles else "neondb_owner"
+    # 取得連線字串的路徑是 GET /projects/{id}/connection_uri，三個 query 都是必填
+    # （dbname / branch / connection_string 那些寫法會 400「query parameter not set」或 404）
+    conn = api(
+        f"/projects/{match['id']}/connection_uri",
+        f"?database_name={db_name}&branch_name={branch['name']}&role_name={role}",
+    )
+    url = conn.get("uri", "")
+    print(f"    role={role} connection string: {url}")
+    print("    （含密碼：這行只適合顯示在你自己的終端機，不要貼進 repo 或 issue）")
 
     record = {
         "project": match["name"],
