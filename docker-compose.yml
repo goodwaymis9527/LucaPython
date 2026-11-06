@@ -4,8 +4,12 @@
 #   B) 自附 postgres（要整套可攜、換機器時用）
 #      docker compose --profile bundled-db up --build
 #
+# 每個 service 都挂在 profile 下，所以直接 `docker compose up` 會報 "no service selected"；
+# .env 已加 COMPOSE_PROFILES=external-db，等於把 A 設成預設，plain `docker compose up -d --build` 就能跑。
+#
 # 密碼不寫死在本檔：compose 會讀同目錄的 .env（已列入 .gitignore），
 # 內容範例：  DB_USER=admin / DB_PASSWORD=%40<password>（含 @ 要寫成 %40）
+#           COMPOSE_PROFILES=external-db
 services:
   app:
     build: .

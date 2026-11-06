@@ -10,6 +10,11 @@
   python aws/deploy.py --skip-build --skip-push （只改 task definition：沿用最後一次 push 的镜像）
   python aws/deploy.py --tag=dev
   python aws/deploy.py --image=<ecr-uri>:<tag>
+  python aws/deploy.py --no-wait            （不輪詢 rollout，update-service 後就返回）
+  python aws/deploy.py --skip-health         （不打 ALB 健康檢查）
+
+結束會印「=== 發佈結果 ===」：exit code 0 = 成功、1 = 失敗（rollout 沒到 COMPLETED 或健康檢查不過），
+deploy.bat / aws/ops.py 就是靠這個 exit code 顯示 ✔/✘。
 """
 from __future__ import annotations
 
@@ -17,6 +22,8 @@ import base64
 import json
 import subprocess
 import sys
+import time
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -118,9 +125,12 @@ state["lastDeploymentAt"] = datetime.now(timezone.utc).isoformat()
 
 # rolling 部署是非同步的：新任務 healthy 後才停舊任務，所以要輪詢到 COMPLETED 才算真的上線
 # （Fargate 起任務約 30–60 秒，這裡最多等 5 分鐘；--no-wait 可跳過）
-if "--no-wait" not in argv:
-    import time
-
+ok = False
+rollout = ""
+waited = "--no-wait" not in argv
+if not waited:
+    print("=== 5) 跳過輪詢（--no-wait）：只送 update-service，結果自行確認 ===")
+else:
     print("=== 5) wait for the rolling deployment ===")
     for attempt in range(30):
         svc = ecs.describe_services(cluster=state["cluster"], services=[state["service"]])["services"][0]
@@ -128,17 +138,49 @@ if "--no-wait" not in argv:
                  d["runningCount"], d["desiredCount"]) for d in svc["deployments"]]
         print(f"  {attempt + 1:2d} {deps}")
         if len(deps) == 1 and deps[0][0] == "COMPLETED" and deps[0][2] == deps[0][3]:
+            ok, rollout = True, deps[0][0]
             break
         time.sleep(10)
     else:
-        print("  还没 COMPLETED（可能新任務不 healthy 或舊任務還在）；看 aws/status.py --logs")
+        print("  ✘ 5 分鐘內沒有 COMPLETED（可能新任務不 healthy 或舊任務還在）")
 
+# 6) rollout COMPLETED 只表示「任務換掉了」，應用真的起來要打 ALB 才算數
+health = None
+if ok and state.get("albDns") and "--skip-health" not in argv:
+    print("=== 6) health check ===")
+    url = f"http://{state['albDns']}/api/health"
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(url, timeout=15) as resp:
+                body = json.loads(resp.read().decode("utf-8", "replace"))
+            health = resp.status == 200 and bool(body.get("ok"))
+            if health:
+                print(f"  ✔ {url} -> {resp.status} ok={body.get('ok')} env={body.get('db', {}).get('env')}")
+                break
+            print(f"  ✘ {url} -> {resp.status} error={body.get('error')}")
+        except Exception as err:
+            print(f"  ✘ {url} 打不通（{err}）")
+        if attempt < 2:
+            time.sleep(5)   # 新任務剛起、ALB 目標群可能還在 registration，重試一次
+
+state["lastDeployOk"] = None if not waited else ok
+state["lastDeployHealth"] = health
 save_state(state)
 
 print("")
-print("=== 部署完成 ===")
-print(f"task definition: {td_ref}")
-print(f"image:           {state['lastImage']}")
+print("=== 發佈結果 ===")
+if not waited:
+    print("  － 未輪詢（--no-wait）：update-service 已送出，結果自行確認")
+else:
+    print(f"  {'✔ 成功（rollout COMPLETED）' if ok else '✘ 失敗（rollout ' + (rollout or 'TIMEOUT') + '）'}")
+print(f"  task definition: {td_ref}")
+print(f"  image:           {state['lastImage']}")
+if health is not None:
+    print(f"  health check:    {'✔ 通過' if health else '✘ 不通過'}")
 if state.get("albDns"):
-    print(f"看健康狀態：http://{state['albDns']}/api/health")
-print("看狀態：python aws/status.py --logs=20")
+    print(f"  看健康狀態：http://{state['albDns']}/api/health")
+if not ok or health is False:
+    print("  看為什麼失敗：python aws/status.py --logs 20")
+
+# exit code 給 aws/ops.py / deploy.bat 判斷成功與否：0 = 成功、1 = 失敗
+raise SystemExit(1 if (waited and not ok) or health is False else 0)

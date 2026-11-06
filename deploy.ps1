@@ -24,7 +24,8 @@
 param(
     [ValidateSet('preflight', 'local', 'build', 'push', 'deploy', 'health', 'logs', 'migrate', 'status', 'all')]
     [string]$Step = 'all',
-    [switch]$Remote   # use for -migrate: run inside the ECS task instead of locally
+    [switch]$Remote,   # use for -migrate: run inside the ECS task instead of locally
+    [switch]$NoPause   # do not hold the screen at the end
 )
 
 $ErrorActionPreference = 'Stop'
@@ -34,6 +35,16 @@ $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
 
 function Line { Write-Host ('-' * 60) }
+
+function Pause {
+    # Hold the screen so the result is still readable: double-clicking a script closes the window at once.
+    # Skipped when stdin is redirected (pipe / automation), or when -NoPause is given.
+    if ($NoPause) { return }
+    if ([Console]::IsInputRedirected) { return }
+    Write-Host ''
+    Write-Host 'Press Enter to exit - the result is on the screen above.'
+    try { [Console]::ReadLine() | Out-Null } catch { }
+}
 
 function Preflight {
     Line
@@ -94,6 +105,9 @@ function Deploy {
     Line
     Write-Host 'Deploy to ECS (build -> push -> new revision -> update service)'
     python aws/deploy.py
+    # deploy.py exits 0 only when the rollout reached COMPLETED and the health check passed
+    if ($LASTEXITCODE -eq 0) { Write-Host 'RESULT: SUCCESS' }
+    else { Write-Host ('RESULT: FAILED (exit ' + $LASTEXITCODE + ')') }
 }
 
 function Show-Health {
@@ -156,3 +170,5 @@ switch ($Step) {
     'status'    { python aws/status.py }
     'all'       { Preflight; Build; Health }
 }
+
+Pause

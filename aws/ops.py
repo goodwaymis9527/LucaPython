@@ -16,10 +16,14 @@ r"""ops.py — deploy.bat 的選單實作（把指令分派給 aws/*.py 與 scri
 剩餘參數會直接交給對應腳本，例如：
   python aws/ops.py deploy --skip-build --skip-push
   python aws/ops.py data --mode=insert --table=items
+
+跑完會印「=== 結果：✔ 成功 / ✘ 失敗 ===」並停在畫面上等一個鍵（雙擊 .bat 時視窗不會秒閉）；
+自動化/pipe 時 stdin 不是終端機就自動不暫停，或加 --no-pause、設 LUCA_NO_PAUSE=1。
 """
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import urllib.request
@@ -53,6 +57,7 @@ USAGE = """usage:
 tip: commit first with gitGithubPush.bat (submodule, then the parent gitlink)
 tip: the image is built from the current working tree, so deploy = whatever is on disk
 tip: local outbound 5432 to Neon is blocked; data sync goes through the Neon SQL Editor
+tip: the screen holds at the end so you can read the result; use --no-pause (or LUCA_NO_PAUSE=1) to skip it
 """
 
 
@@ -67,6 +72,38 @@ def run(script: str, args: list[str]) -> int:
     cmd = [sys.executable, str(ROOT / script)] + args
     print(" ".join(cmd))
     return subprocess.run(cmd).returncode
+
+
+def pause() -> None:
+    """跑完停在畫面上等一個鍵：雙擊 deploy.bat 時視窗會秒閉，結果來不及看。
+
+    stdin 不是終端機（pipe、redirect、CI、自動化）時暫停會卡死，所以跳過；
+    想手動跳過就加 --no-pause 或設 LUCA_NO_PAUSE=1。
+    """
+    if os.environ.get("LUCA_NO_PAUSE") == "1" or not sys.stdin.isatty():
+        return
+    try:
+        input("\n按 Enter 結束（結果已在畫面上）...")
+    except (EOFError, KeyboardInterrupt):
+        print()
+
+
+def dispatch(action: str, rest: list[str]) -> int:
+    if action not in ACTIONS:
+        print(f"[X] unknown action: {action}")
+        print(USAGE)
+        return 1
+    if action == "health":
+        return health()
+    if action == "smoke":
+        return run("scripts/smoke_test.py", [f"--base=http://{state()['albDns']}"] + rest)
+    if action == "logs":
+        return run("aws/status.py", ["--logs"] + (rest or ["20"]))
+    if action == "data":
+        print("local -> Neon：本機連不到 Neon 的 5432，所以這裡只產生 SQL 檔，"
+              "再貼到 Neon Console 的 SQL Editor（或 VPC 內 one-shot task）執行\n")
+        return run("scripts/dump_data.py", rest)
+    return run(ACTIONS[action][0], list(ACTIONS[action][1:]) + rest)
 
 
 def health() -> int:
@@ -84,27 +121,29 @@ def health() -> int:
 def main() -> int:
     argv = sys.argv[1:]
     action = argv[0] if argv else "deploy"
-    rest = argv[1:]
+    rest = [a for a in argv[1:] if a != "--no-pause"]
+    no_pause = "--no-pause" in argv
 
     if action in ("usage", "-h", "--help"):
         print(USAGE)
         return 0
-    if action not in ACTIONS:
-        print(f"[X] unknown action: {action}")
-        print(USAGE)
-        return 1
 
-    if action == "health":
-        return health()
-    if action == "smoke":
-        return run("scripts/smoke_test.py", [f"--base=http://{state()['albDns']}"] + rest)
-    if action == "logs":
-        return run("aws/status.py", ["--logs"] + (rest or ["20"]))
-    if action == "data":
-        print("local -> Neon：本機連不到 Neon 的 5432，所以這裡只產生 SQL 檔，"
-              "再貼到 Neon Console 的 SQL Editor（或 VPC 內 one-shot task）執行\n")
-        return run("scripts/dump_data.py", rest)
-    return run(ACTIONS[action][0], list(ACTIONS[action][1:]) + rest)
+    try:
+        code = dispatch(action, rest)
+    except SystemExit as err:            # 子腳本的 raise SystemExit("...") 或 state() 缺檔
+        code = 1 if err.code not in (0, None) else 0
+        if code:
+            print(f"✘ {err}")
+    except KeyboardInterrupt:
+        print("使用者中斷")
+        code = 130
+
+    # 統一在這裡顯示成功與否：deploy.py 用 exit code 表達結果（0 = rollout COMPLETED 且健康檢查通過）
+    print("")
+    print(f"=== 結果：{'✔ 成功' if code == 0 else '✘ 失敗（exit ' + str(code) + '）'} ===")
+    if not no_pause:
+        pause()
+    return code
 
 
 if __name__ == "__main__":

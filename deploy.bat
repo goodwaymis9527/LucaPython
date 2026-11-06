@@ -10,4 +10,5 @@ if "%~1"=="" (
 ) else (
     python aws\ops.py %*
 )
+
 exit /b %ERRORLEVEL%

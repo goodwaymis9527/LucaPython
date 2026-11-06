@@ -217,6 +217,18 @@ python aws/exec.py "python scripts/migrate.py"
 > `.bat` 保持全 ASCII 且 ≤1024 bytes：cmd 讀 .bat 是一塊 1024 bytes，行被切開會報 `not recognized`；
 > 中文訊息由 `aws/ops.py`（Python 印 UTF-8）負責。
 
+跑完會在畫面上印結果並停住等一個鍵（雙擊 .bat 時視窗不會秒閉）：
+
+```
+=== 發佈結果 ===            ← aws/deploy.py：rollout 是否 COMPLETED、健康檢查是否通過
+=== 結果：✔ 成功 ===        ← aws/ops.py：依 exit code 判斷
+按 Enter 結束（結果已在畫面上）...
+```
+
+- exit code：`0` = rollout `COMPLETED` 且 ALB 健康檢查通過、`1` = 失敗，所以 `%ERRORLEVEL%` 可直接判斷。
+- 不想停住：加 `--no-pause` 或設 `LUCA_NO_PAUSE=1`；stdin 被 pipe/redirect（自動化）時本來就不會暫停。
+- `deploy.ps1` 同樣在結束時停住（`-NoPause` 可跳過）。
+
 ---
 
 ## 5. PostgreSQL 手動同步
