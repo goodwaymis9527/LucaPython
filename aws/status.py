@@ -49,7 +49,8 @@ def main() -> int:
         if not tds:
             print_c("  （還沒有 task definition revision）")
             return
-        td = call("ecs", "describe_task_definition", taskDefinitionArn=tds[0])["taskDefinition"]
+        # describe_task_definition 的參數是 taskDefinition（收 ARN 或 family:revision），不是 taskDefinitionArn
+        td = call("ecs", "describe_task_definition", taskDefinition=tds[0])["taskDefinition"]
         container = td["containerDefinitions"][0]
         print_c(f"  Task def:  {td['taskDefinitionArn']}")
         print_c(f"  CPU/Mem:   {td['cpu']}/{td['memory']} | {td['networkMode']}")
