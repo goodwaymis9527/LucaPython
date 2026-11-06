@@ -1,0 +1,2 @@
+# 只有 aws/*.py 這幾個部署腳本用到，不进鏡像（與 Node 版把 @aws-sdk 列在 devDependencies 同樣思路）
+boto3==1.35.75

@@ -1,0 +1,15 @@
+.git
+.gitignore
+.env
+.env.local
+.env.example
+.aws-state
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+requirements-dev.txt
+deploy.ps1
+readme.md
+docs

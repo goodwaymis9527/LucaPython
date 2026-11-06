@@ -1,0 +1,61 @@
+# 兩種跑法：
+#   A) 預設：只用既有 postgres17（「開發時直接使用」）
+#      docker compose --profile external-db up --build
+#   B) 自附 postgres（要整套可攜、換機器時用）
+#      docker compose --profile bundled-db up --build
+#
+# 密碼不寫死在本檔：compose 會讀同目錄的 .env（已列入 .gitignore），
+# 內容範例：  DB_USER=admin / DB_PASSWORD=%40<password>（含 @ 要寫成 %40）
+services:
+  app:
+    build: .
+    image: lucapython:dev
+    container_name: luca-python
+    ports:
+      # 本機 8000 已被 ai-service 容器占用（docker ps 可見），所以本機對應改用 8090；
+      # 容器內部仍然是 8000，AWS 的 target group 用的就是 8000。
+      - "8090:8000"
+    environment:
+      # 容器內連 DB 的 host 是 postgres17（shared-network 的 DNS alias），不能寫 localhost
+      DATABASE_URL: postgresql://${DB_USER:-admin}:${DB_PASSWORD}@postgres17:5432/awsLucaPysn
+      DB_DRIVER: docker
+      APP_ENV: development
+      GUNICORN_WORKERS: "1"
+    networks:
+      - shared-network
+    profiles: ["external-db"]
+    restart: unless-stopped
+
+  # B) 自附資料庫：名稱也會是 awsLucaPysn（與正式區一致）
+  db:
+    image: postgres:17
+    container_name: luca-python-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: awsLucaPysn
+    networks:
+      - shared-network
+    profiles: ["bundled-db"]
+    restart: unless-stopped
+
+  app-own-db:
+    build: .
+    image: lucapython:dev
+    container_name: luca-python-own-db
+    ports:
+      - "8001:8000"
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-admin}:${DB_PASSWORD}@luca-python-db:5432/awsLucaPysn
+      DB_DRIVER: docker
+      APP_ENV: development
+    networks:
+      - shared-network
+    depends_on:
+      - db
+    profiles: ["bundled-db"]
+    restart: unless-stopped
+
+networks:
+  shared-network:
+    external: true

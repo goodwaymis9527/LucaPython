@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LucaPython（正式區）</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <h1>LucaPython（正式區）</h1>
+    <p>
+      資料來自 PostgreSQL <code>items</code> 表｜
+      driver=<code>{{ info.driver }}</code>｜
+      env=<code>{{ info.env }}</code>｜
+      region=<code>{{ info.region }}</code>｜
+      db=<code>{{ info.database }}</code>｜
+      host=<code>{{ info.host }}</code>｜
+      DB {% if db_ok %}<span class="ok">OK</span>{% else %}<span class="bad">✗ {{ db_error }}</span>{% endif %}
+    </p>
+
+    <table>
+      <tr>
+        <th>#</th>
+        <th>標題</th>
+        <th>內文</th>
+        <th>建立時間</th>
+      </tr>
+      {% if items|length == 0 %}
+        <tr><td colspan="4">還沒有資料，下方表單新增一筆</td></tr>
+      {% endif %}
+      {% for item in items %}
+        <tr>
+          <td>{{ item.id }}</td>
+          <td>{{ item.title }}</td>
+          <td>{{ item.body }}</td>
+          <td>{{ item.created_at.isoformat() if item.created_at else '' }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+
+    {# 純表單 POST，不需要 client JS；route 處理完會 303 轉回本頁 #}
+    <form method="post" action="/api/items">
+      <input name="title" placeholder="標題" required maxlength="120" />
+      <textarea name="body" placeholder="內文" rows="4" maxlength="2000"></textarea>
+      <button type="submit">新增</button>
+    </form>
+
+    <p class="hint">API：<a href="/api/items">/api/items</a>｜<a href="/api/health">/api/health</a>｜<a href="/docs">/docs</a></p>
+  </main>
+</body>
+</html>

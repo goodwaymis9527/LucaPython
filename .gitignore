@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# 環境變數（本機開發用）
+.env
+.env.local
+
+# AWS 狀態檔（含 secret arn、資源 ID，可能含連線字串）
+.aws-state/
+
+# 執行檔與圖片
+server
+*.exe
+*.log
+
+# 編輯器與作業系統
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

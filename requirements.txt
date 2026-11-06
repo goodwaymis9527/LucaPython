@@ -1,0 +1,11 @@
+# 執行期依賴（Docker 鏡像內装這些）
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+gunicorn==23.0.0
+jinja2==3.1.6
+python-dotenv==1.2.2
+# psycopg v3：v2 沒有內建 ConnectionPool；[binary,pool] 才是我們要的組合
+# 注意：Neon 的 pooler 是 transaction mode，所以 db.py 預設 prepare=False
+psycopg[binary,pool]==3.2.3
+# urlencoded 表單 Starlette 自己就能解析；multipart 需要這個
+python-multipart==0.0.20

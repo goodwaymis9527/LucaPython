@@ -1,0 +1,50 @@
+{
+  "family": "luca-python",
+  "networkMode": "awsvpc",
+  "cpu": "1024",
+  "memory": "2048",
+  "requiresCompatibilities": ["FARGATE"],
+  "executionRoleArn": "{{EXECUTION_ROLE_ARN}}",
+  "taskRoleArn": "{{TASK_ROLE_ARN}}",
+  "containerDefinitions": [
+    {
+      "name": "luca-python",
+      "image": "{{IMAGE_URI}}",
+      "portMappings": [
+        { "containerPort": 8000, "protocol": "tcp" }
+      ],
+      "environment": [
+        { "name": "APP_ENV", "value": "production" },
+        { "name": "PORT", "value": "8000" },
+        { "name": "GUNICORN_WORKERS", "value": "2" },
+        { "name": "APP_NAME", "value": "luca-python" },
+        { "name": "DB_DRIVER", "value": "neon" },
+        { "name": "DB_SSLMODE", "value": "require" },
+        { "name": "DB_POOL_MIN", "value": "1" },
+        { "name": "DB_POOL_MAX", "value": "5" },
+        { "name": "DB_CONNECT_TIMEOUT", "value": "10" },
+        { "name": "DB_PREPARE", "value": "false" },
+        { "name": "AWS_REGION", "value": "ap-southeast-2" },
+        { "name": "TZ", "value": "Asia/Taipei" }
+      ],
+      "secrets": [],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "python scripts/healthcheck.py || exit 1"],
+        "interval": 15,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 20
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/luca-python",
+          "awslogs-region": "ap-southeast-2",
+          "awslogs-stream-prefix": "app",
+          "awslogs-create-group": "true"
+        }
+      },
+      "essential": true
+    }
+  ]
+}
