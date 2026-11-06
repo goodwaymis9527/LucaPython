@@ -1,0 +1,31 @@
+{
+  "region": "ap-southeast-2",
+  "project": "luca-python",
+  "account": "000000000000",
+  "vpcId": "vpc-00000000000000000",
+  "vpcCidr": "172.31.0.0/16",
+  "igwId": "igw-00000000000000000",
+  "routeTableId": "rtb-00000000000000000",
+  "subnets": [
+    "subnet-00000000000000000",
+    "subnet-00000000000000001",
+    "subnet-00000000000000002"
+  ],
+  "ecrUri": "000000000000.dkr.ecr.ap-southeast-2.amazonaws.com/luca-python",
+  "logGroup": "/ecs/luca-python",
+  "executionRoleArn": "arn:aws:iam::000000000000:role/luca-python-execution",
+  "taskRoleArn": "arn:aws:iam::000000000000:role/luca-python-task",
+  "taskSgId": "sg-00000000000000000",
+  "albSgId": "sg-00000000000000001",
+  "cluster": "luca-python",
+  "service": "luca-python",
+  "serviceArn": "arn:aws:ecs:ap-southeast-2:000000000000:service/luca-python/luca-python",
+  "taskFamily": "luca-python",
+  "taskRevision": 1,
+  "targetGroupArn": "arn:aws:elasticloadbalancing:ap-southeast-2:000000000000:targetgroup/luca-python/0000000000000000",
+  "albArn": "arn:aws:elasticloadbalancing:ap-southeast-2:000000000000:loadbalancer/app/luca-python/0000000000000000",
+  "albDns": "luca-python-000000000000.ap-southeast-2.elb.amazonaws.com",
+  "dbSecretArn": "arn:aws:secretsmanager:ap-southeast-2:000000000000:secret:luca-python/database",
+  "lastImage": "000000000000.dkr.ecr.ap-southeast-2.amazonaws.com/luca-python:latest",
+  "lastDeploymentAt": "2026-01-01T00:00:00+00:00"
+}

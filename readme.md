@@ -124,6 +124,27 @@ python aws/bootstrap.py       # ECR + IAM roles + CloudWatch + ALB + target grou
 > `bootstrap.py` 需要 IAM 權限，policy 見
 > `../20261106_LucaPython架構_OpenCode/lucaaws-iam-policy.json`。
 
+### `.aws-state/` 狀態檔
+
+所有 AWS 腳本都讀 `.aws-state/config.json`（`bootstrap.py` / `deploy.py` / `status.py` / `run_once.py` / `netcheck.py` 會把讀到的資源 id 寫回去）。
+這個資料夾是 gitignored（可能含連線字串），repo 裡只有欄位範本 `aws-state.example.json`。
+
+換機器或新 clone 時，兩種做法：
+
+1. **直接把整個 `.aws-state/` 複製過去**（最快，連 `neon.json` 一起帶走）。
+2. **重跑一次讓腳本自己寫回來**（`bootstrap.py` 是冪等的：已存在的資源會走 `AlreadyExists` / `Duplicate` 分支，把 id 重新寫進 state）：
+
+   ```powershell
+   python aws/bootstrap.py     # cluster / roles / SG / ALB / target group / listener → config.json
+   python aws/neon.py          # 重建 neon.json（需要 NEON_API_KEY）
+   python aws/secret.py        # 重建 dbSecretArn
+   ```
+
+`aws-state.example.json` 的欄位就是腳本會寫入的鍵（值都是佔位字串，不用照抄）；腳本缺哪個鍵會自己補，所以它只是對照表。
+`aws/rds.py`（備選的 RDS 路）另外會寫 `rdsSgId` / `rdsEndpoint` / `rdsDbName` / `rdsUser`。
+
+`.aws-state/neon.json` 的形狀：`project` / `projectId` / `branch` / `branchId` / `database` / `region` / `connectionUrl`（含密碼，所以只在本地）。
+
 ### 正式機資料庫
 
 Neon 專案 `luca-python`（獨立 compute，資料庫同名 `awsLucaPysn`）：
