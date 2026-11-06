@@ -99,7 +99,8 @@ DB_PASSWORD=%40<password>      # 真正的密碼在这里（檔案不入倉庫�
 1. 確認 `postgres17` 容器在跑（`shared-network` 由 compose 自動建立）。
 2. `docker compose up -d --build` → 打開 <http://localhost:8090>
    - `/` → Jinja2 首頁
-   - `/api/health` → `{"status":"ok","host":"postgres17","database":"awsLucaPysn","item_count":1}`
+   - `/api/health` → `{"ok":true,"db":{"driver":"docker","region":"local","env":"development","host":"postgres17","database":"awsLucaPysn","pool":{"min":1,"max":5},"prepare":false},"error":null}`
+     （`.ps1 -Step health` 會同時打 ALB 與本機 8090 兩邊，看 `env` 就知道連的是哪一邊）
    - `/api/items` → 列表與 POST 新增
 
 `docker-compose.yml` 兩個 service：

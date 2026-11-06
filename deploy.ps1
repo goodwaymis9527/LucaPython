@@ -96,22 +96,36 @@ function Deploy {
     python aws/deploy.py
 }
 
+function Show-Health {
+    param([string]$Label, [string]$Url)
+    try {
+        # -UseBasicParsing: PS 5.1's Invoke-RestMethod needs the IE engine otherwise it can fail headless.
+        # The payload is {ok, db:{driver,region,env,host,database,pool,prepare}, error} - the old code
+        # read $r.status / $r.host / $r.database, which do not exist, so it printed empty values.
+        $r = Invoke-RestMethod $Url -TimeoutSec 15 -UseBasicParsing
+        Write-Host ('  {0}: ok={1} env={2} host={3} db={4} prepare={5}' -f `
+            $Label, $r.ok, $r.db.env, $r.db.host, $r.db.database, $r.db.prepare)
+        if ($r.error) { Write-Host ('    error: ' + $r.error) }
+    } catch {
+        Write-Host ('  {0}: not reachable - {1}' -f $Label, $_.Exception.Message)
+    }
+}
+
 function Health {
     Line
     Write-Host 'Health check'
-    $cfg = Get-Content .aws-state/config.json -Raw
-    if ($cfg -match '"alb_dns_name":\s*"([^"]+)"') {
-        $dns = $Matches[1]
-        Write-Host "ALB: http://$dns/api/health"
-        try {
-            $r = Invoke-RestMethod "http://$dns/api/health"
-            Write-Host ("  status={0} host={1} db={2} items={3}" -f $r.status, $r.host, $r.database, $r.item_count)
-        } catch { Write-Host "  ALB not reachable yet: $($_.Exception.Message)" }
+    $cfg = $null
+    if (Test-Path .aws-state/config.json) {
+        $cfg = Get-Content .aws-state/config.json -Raw | ConvertFrom-Json
     }
-    try {
-        $r = Invoke-RestMethod 'http://127.0.0.1:8090/api/health'
-        Write-Host ("  local container: status={0} host={1} db={2}" -f $r.status, $r.host, $r.database)
-    } catch { Write-Host "  local container not running: $($_.Exception.Message)" }
+    if ($cfg -and $cfg.albDns) {
+        Show-Health 'remote (ALB)' ('http://' + $cfg.albDns + '/api/health')
+    } else {
+        Write-Host '  remote: no albDns in .aws-state/config.json (run: python aws/bootstrap.py)'
+    }
+    # 8090 is this project; host port 8000 belongs to another app (ai-service),
+    # which also answers /api/health - that is a known false positive, so never probe 8000 here.
+    Show-Health 'local container (127.0.0.1:8090)' 'http://127.0.0.1:8090/api/health'
 }
 
 function Logs { python aws/status.py --logs 30 }
@@ -119,8 +133,11 @@ function Logs { python aws/status.py --logs 30 }
 function Migrate {
     Line
     Write-Host 'Migrate'
-    if ($Remote) { python aws/exec.py 'python scripts/migrate.py' }
-    else {
+    if ($Remote) {
+        # exec.py only opens an interactive session (boto3 cannot read its stdout, and this machine
+        # has no session-manager-plugin), so run the command as a one-shot task and read CloudWatch.
+        python aws/run_once.py 'python scripts/migrate.py' --stop
+    } else {
         Load-DotEnv
         $env:DATABASE_URL = LocalUrl
         python scripts/migrate.py
